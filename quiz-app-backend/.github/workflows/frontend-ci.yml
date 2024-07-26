@@ -1,0 +1,82 @@
+name: Backend CI Pipeline
+
+on:
+  push:
+    branches:
+      - main
+      - dev
+      - devops-barney
+  pull_request:
+    branches:
+      - main
+      - dev
+      - devops-barney
+
+jobs:
+  cache-dependencies-vulnerabilities-scan:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: [20.x]
+        architecture: [x64]
+
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Use Node.js ${{ matrix.node-version }} - ${{ matrix.architecture }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          architecture: ${{ matrix.architecture }}
+
+      - name: Cache Dependencies
+        uses: actions/cache@v4
+        id: cache-node-modules
+        with:
+          path: ./node_modules
+          key: ${{ runner.os }}-node-${{ matrix.node-version }}-${{ hashFiles('**/package-lock.json') }}
+      - name: Install Dependencies
+        if: steps.cache-node-modules.outputs.cache-hit != 'true'
+        run: npm install
+      
+      - name: Lint Code
+        run: npm run lint
+      - name: Format Code
+        run: npm run format
+      - name: unit Test
+        run: npm run test
+      
+      - name: Code Quality Check (SAST) 
+        uses: sonarsource/sonarcloud-github-action@master
+        env:
+          GITHUB_TOKEN: ${{ secrets._GITHUB_TOKEN }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        with:
+          args: >
+            -Dsonar.organization=${{ secrets.SONAR_ORGANIZTIONA }}
+            -Dsonar.projectKey=${{ secrets.SONAR_PROJECT_KEY }}
+            -Dsonar.host.url=${{ secrets.SONAR_URL }}
+            -Dsonar.login=${{ secrets.SONAR_TOKEN }}
+            -Dsonar.sources=.
+            -Dsonar.verbose=true
+      
+      - name: Install Trivy
+        run: |
+          curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin
+      - name: Trivy FS Scan
+        run: |
+          echo "Scaning File With Trivy"
+          trivy fs --format table -o trivy-fs-results.html .
+      - name: Archive Trivy FS Scan Results
+        uses: actions/upload-artifacts@v4
+        with:
+          name: trivy-fs-results.html
+          path: trivy-fs-results.html
+          
+
+      
+
+
