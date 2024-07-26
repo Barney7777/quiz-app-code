@@ -45,7 +45,7 @@ jobs:
       - name: Lint Code
         run: npm run lint
       - name: Format Code
-        run: npm run format
+        run: npm run prettier
       - name: unit Test
         run: npm run test
       
