@@ -56,7 +56,7 @@ jobs:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         with:
           args: >
-            -Dsonar.organization=${{ secrets.SONAR_ORGANIZTIONA }}
+            -Dsonar.organization=${{ secrets.SONAR_ORGANIZTION }}
             -Dsonar.projectKey=${{ secrets.SONAR_PROJECT_KEY }}
             -Dsonar.host.url=${{ secrets.SONAR_URL }}
             -Dsonar.login=${{ secrets.SONAR_TOKEN }}
@@ -71,7 +71,7 @@ jobs:
           echo "Scaning File With Trivy"
           trivy fs --format table -o trivy-fs-results.html .
       - name: Archive Trivy FS Scan Results
-        uses: actions/upload-artifacts@v4
+        uses: actions/upload-artifact@v4
         with:
           name: trivy-fs-results.html
           path: trivy-fs-results.html
