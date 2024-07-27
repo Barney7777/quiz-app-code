@@ -15,6 +15,9 @@ on:
 jobs:
   cache-dependencies-vulnerabilities-scan:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
     strategy:
       matrix:
         node-version: [20.x]
@@ -75,8 +78,78 @@ jobs:
         with:
           name: trivy-fs-results.html
           path: trivy-fs-results.html
-          
-
+  
+  docker-image-build-scan-push:
+    needs: cache-dependencies-vulnerabilities-scan
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
+    permissions:
+      id-token: write
+      contents: read 
+    env: 
+      ECR_REPOSITORY_DEV: ${{ secrets.BACKEND_REPO_DEV }}
+      ECR_REPOSITORY_PROD: ${{ secrets.BACKEND_REPO_PROD }}
+      IMAGE_TAG: ${{ github.sha }}
+      ECR_REGISTRY: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_DEFAULT_REGION }}.amazonaws.com
+      APP_NAME: quiz-app-backend
+    
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Setup QEMU
+        uses: docker/setup-qemu-action@v3
+      - name: Setup Docker Buildx
+        uses: docker/setup-buildx-action@v3
       
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_QUIZ_APP_BACKEND }}
+          aws-region: ${{ secrets.AWS_DEFAULT_REGION }}
+
+      - name: Login to Amazon ECR Private Registry
+        uses: aws-actions/amazon-ecr-login@v2
+      
+      - name: Build Docker Image
+        run: |
+          echo "Building docker image"
+          docker build -t $APP_NAME:latest .
+      
+      - name: Install Trivy
+        run: |
+          curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin
+      - name: Trivy Image Scan
+        run: |
+          echo "Scanning Docker Image"
+          trivy image --format table -o trivy-image-report.html $APP_NAME:latest
+      - name: Archive Trivy Image Scan Results
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-image-report.html
+          path: trivy-image-report.html
+      
+      - name: Push Docker Image to DEV ECR
+        if: github.ref == 'refs/heads/dev' && github.event_name == 'push'
+        run: |
+          echo "Tagging Docker Image For Dev"
+          docker tag $APP_NAME:latest $ECR_REGISTRY/$ECR_REPOSITORY_DEV:latest
+          docker tag $APP_NAME:latest $ECR_REGISTRY/$ECR_REPOSITORY_DEV:$IMAGE_TAG
+          echo "Pushing Docker Image"
+          docker tag $APP_NAME:latest $ECR_REGISTRY/$ECR_REPOSITORY_DEV:latest
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY_DEV:$IMAGE_TAG
+      
+      - name: Tag and Push Docker Image to Prod ECR
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        run: |
+          echo "Tagging Docker image for Prod"
+          docker tag $APP_NAME:latest $ECR_REGISTRY/$ECR_REPOSITORY_PROD:latest
+          docker tag $APP_NAME:latest $ECR_REGISTRY/$ECR_REPOSITORY_PROD:$IMAGE_TAG
+          echo "Pushing Docker image to Prod ECR"
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY_PROD:latest
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY_PROD:$IMAGE_TAG
 
 
