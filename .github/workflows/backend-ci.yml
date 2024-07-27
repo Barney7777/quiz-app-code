@@ -104,16 +104,7 @@ jobs:
         uses: docker/setup-qemu-action@v3
       - name: Setup Docker Buildx
         uses: docker/setup-buildx-action@v3
-      
-      - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: ${{ secrets.AWS_ROLE_QUIZ_APP_BACKEND }}
-          aws-region: ${{ secrets.AWS_DEFAULT_REGION }}
 
-      - name: Login to Amazon ECR Private Registry
-        uses: aws-actions/amazon-ecr-login@v2
-      
       - name: Build Docker Image
         run: |
           echo "Building docker image"
@@ -131,6 +122,17 @@ jobs:
         with:
           name: trivy-image-report.html
           path: trivy-image-report.html
+      
+      - name: Configure AWS Credentials
+        if: github.ref == 'refs/heads/dev' && github.event_name == 'push' || github.ref == 'refs/heads/main' && github.event_name == 'push'
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_QUIZ_APP_BACKEND }}
+          aws-region: ${{ secrets.AWS_DEFAULT_REGION }}
+      
+      - name: Login to Amazon ECR Private Registry
+        if: github.ref == 'refs/heads/dev' && github.event_name == 'push' || github.ref == 'refs/heads/main' && github.event_name == 'push'
+        uses: aws-actions/amazon-ecr-login@v2
       
       - name: Push Docker Image to DEV ECR
         if: github.ref == 'refs/heads/dev' && github.event_name == 'push'
